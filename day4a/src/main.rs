@@ -35,7 +35,7 @@ fn get_square(grid: &Vec<Vec<char>>, x: usize, y: usize, xoff: i32, yoff: i32) -
 
     newx.and_then(|x| {
         newy.and_then(|y| {
-            grid.get(x).and_then(|row| row.get(y))
+            grid.get(y).and_then(|row| row.get(x))
         })
     }).copied()
 
