@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fs;
 use std::fmt::Display;
 
@@ -67,6 +68,17 @@ impl<T: Copy + Clone + Display> Grid<T> {
         }
     }
 
+    fn off(&self, x: usize, y: usize, xoff: isize, yoff: isize) -> Option<(usize, usize)> {
+        let newx = x.checked_add_signed(xoff)?;
+        let newy = y.checked_add_signed(yoff)?;
+
+        if newx >= self.width || newy >= self.height {
+            None
+        } else {
+            Some((newx, newy))
+        }
+    }
+
     fn get_off(&self, x: usize, y: usize, xoff: isize, yoff: isize) -> Option<T> {
         let newx = x.checked_add_signed(xoff);
         let newy = y.checked_add_signed(yoff);
@@ -119,7 +131,7 @@ impl<T: Copy + Clone> Iterator for GridIter<'_, T> {
     }
 }
 
-#[derive(PartialEq, Eq, Clone, Copy)]
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
 enum Dir {
     Up,
     Right,
@@ -152,25 +164,20 @@ const OBSTACLE: char = '#';
 const BLANK: char = '.';
 
 
-fn search_for_loop(grid: &mut Grid<char>, x: usize, y: usize, dir: Dir, path: &mut Vec<(usize, usize, Dir)>, recurse: bool, found: &mut usize) {
+fn search_for_loop(grid: &Grid<char>, x: usize, y: usize, dir: Dir, path: &mut Vec<(usize, usize, Dir)>) -> bool {
     let mut curr_xoff = 0;
     let mut curr_yoff = 0;
     let mut curr_dir = dir;
-
-    let initial_len = path.len();
 
     loop {
         // Do something about the current location before we start thinking about the next square
         // TODO: add to visited list
         let curr_x = x.checked_add_signed(curr_xoff).unwrap();
         let curr_y = y.checked_add_signed(curr_yoff).unwrap();
-        // println!("Searching {curr_x}, {curr_y}");
         let current_state = (curr_x, curr_y, curr_dir);
         if path.contains(&current_state) {
             // Found a loop
-            *found += 1;
-            println!("Worked!");
-            return;
+            return true;
         } else {
             path.push(current_state);
         }
@@ -182,30 +189,19 @@ fn search_for_loop(grid: &mut Grid<char>, x: usize, y: usize, dir: Dir, path: &m
                 curr_dir = curr_dir.next();
                 continue; // Need to recheck the next dir
             } else {
-                // Pretend there is actually an obstacle in front of us
-                if recurse && next == BLANK {
-                    println!("Attempting obstacle at {x}+{next_xoff}, {y}+{next_yoff}");
-                    grid.set_off_val(x, y, next_xoff, next_yoff, OBSTACLE);
-                    search_for_loop(grid, curr_x, curr_y, curr_dir.next(), path, false, found);
-                    grid.set_off_val(x, y, next_xoff, next_yoff, BLANK);
-                }
-
                 // Otherwise continue as normal
                 curr_xoff = next_xoff;
                 curr_yoff = next_yoff;
             }
         } else {
             // This is the last square we will walk
-            // println!("Fail");
-            break;
+            return false;
         }
     }
-
-    path.truncate(initial_len);
 }
 
 fn main() {
-    const INPUT_FILE: &str = "data/sample.txt";
+    const INPUT_FILE: &str = "data/input.txt";
 
     let mut grid: Grid<char> = Grid::<char>::from_file(INPUT_FILE);
 
@@ -219,9 +215,26 @@ fn main() {
     let start_x = start.expect("Start not found").0;
     let start_y = start.expect("Start not found").1;
 
-    let mut visited = 0;
-    search_for_loop(&mut grid, start_x, start_y, Dir::Up, &mut Vec::new(), true, &mut visited);
-    println!("{visited}");
+    let mut path = Vec::new();
+    search_for_loop(&grid, start_x, start_y, Dir::Up, &mut path);
+
+    let mut loops = Vec::new();
+    for (x, y, dir) in path {
+        let xoff = dir.off().0;
+        let yoff = dir.off().1;
+        if let Some(next_off) = grid.get_off(x, y, xoff, yoff) {
+            if next_off != START {
+                grid.set_off_val(x, y, xoff, yoff, OBSTACLE);
+                if search_for_loop(&grid, start_x, start_y, Dir::Up, &mut Vec::new()) {
+                    let (a, b) = grid.off(x, y, xoff, yoff).unwrap();
+                    loops.push((a, b));
+                }
+                grid.set_off_val(x, y, xoff, yoff, next_off);
+            }
+        }
+    }
+
+    println!("{}", loops.into_iter().collect::<HashSet<(usize, usize)>>().len());
 }
 
 
